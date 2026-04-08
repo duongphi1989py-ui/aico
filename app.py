@@ -1,84 +1,114 @@
 import streamlit as st
 import asyncio
 import edge_tts
+import re
+import hashlib
 import os
-import tempfile
 
-# Coqui
-from TTS.api import TTS
+st.set_page_config(page_title="Voice AI TikTok PRO", page_icon="🎙️")
 
-st.set_page_config(page_title="Voice AI PRO MAX", page_icon="🎙️")
+st.title("🎙️ Voice AI TikTok PRO")
+st.caption("🔥 Giọng mượt – style TikTok – chạy web 100%")
 
-st.title("🎙️ Voice AI PRO MAX")
-st.write("🔥 Edge TTS + Clone giọng AI (Coqui XTTS v2)")
+# ================= SESSION =================
+if "text_input" not in st.session_state:
+    st.session_state.text_input = ""
 
-# ================= MODE =================
-mode = st.radio("Chọn chế độ:", ["⚡ Nhanh (Edge TTS)", "🧠 Clone giọng (AI)"])
+# ================= UTILS =================
+def clear_text():
+    st.session_state.text_input = ""
 
-text = st.text_area("Nhập nội dung:", height=200)
+def get_hash(text):
+    return hashlib.md5(text.encode()).hexdigest()
 
-# ================= EDGE TTS =================
-async def generate_edge(text, voice, rate, file):
-    communicate = edge_tts.Communicate(text=text, voice=voice, rate=rate)
+# ================= STYLE ENGINE =================
+def tiktok_style(text):
+    text = text.strip()
+
+    # xuống dòng -> pause
+    text = text.replace("\n", "... ")
+
+    # dấu câu
+    text = text.replace(".", "... ")
+    text = text.replace("!", "... ")
+    text = text.replace("?", "... ")
+
+    # clean space
+    text = re.sub(r'\s+', ' ', text)
+
+    return text
+
+# ================= TTS =================
+async def generate_voice(text, voice, rate, pitch, file):
+    communicate = edge_tts.Communicate(
+        text=text,
+        voice=voice,
+        rate=rate,
+        pitch=pitch
+    )
     await communicate.save(file)
 
-# ================= CLONE VOICE =================
-@st.cache_resource
-def load_model():
-    return TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2")
+# ================= UI =================
+text = st.text_area("Nhập nội dung:", height=300, key="text_input")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.button("🗑️ Xóa nhanh", on_click=clear_text)
+
+with col2:
+    st.button("📋 Copy nhanh", on_click=lambda: st.toast("👉 Ctrl + C để copy"))
+
+# ================= PRESET =================
+preset = st.selectbox("🎭 Chọn style:", [
+    "🔥 TikTok nữ viral",
+    "📖 Kể chuyện",
+    "🎬 Drama",
+    "📢 Quảng cáo"
+])
+
+# ================= CONFIG =================
+if preset == "🔥 TikTok nữ viral":
+    voice = "vi-VN-HoaiMyNeural"
+    rate = "+25%"
+    pitch = "+3Hz"
+
+elif preset == "📖 Kể chuyện":
+    voice = "vi-VN-NamMinhNeural"
+    rate = "-5%"
+    pitch = "-2Hz"
+
+elif preset == "🎬 Drama":
+    voice = "vi-VN-HoaiMyNeural"
+    rate = "+10%"
+    pitch = "+1Hz"
+
+else:
+    voice = "vi-VN-HoaiMyNeural"
+    rate = "+20%"
+    pitch = "+2Hz"
 
 # ================= RUN =================
-if st.button("🚀 Generate"):
+if st.button("🚀 Generate Voice"):
 
     if not text:
-        st.warning("Nhập text trước!")
+        st.warning("Nhập nội dung trước!")
         st.stop()
 
-    # ================= EDGE MODE =================
-    if mode == "⚡ Nhanh (Edge TTS)":
-        voices = {
-            "Nữ VN": "vi-VN-HoaiMyNeural",
-            "Nam VN": "vi-VN-NamMinhNeural"
-        }
+    # xử lý text
+    final_text = tiktok_style(text)
 
-        voice_name = st.selectbox("Chọn giọng", list(voices.keys()))
-        voice = voices[voice_name]
+    file_name = f"voice_{get_hash(final_text)}.mp3"
 
-        file_path = "edge_output.mp3"
+    with st.spinner("🎧 Đang tạo giọng..."):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(
+            generate_voice(final_text, voice, rate, pitch, file_name)
+        )
 
-        with st.spinner("Đang tạo giọng..."):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(generate_edge(text, voice, "+15%", file_path))
+    st.success("✅ Done!")
+    st.audio(file_name)
 
-        st.audio(file_path)
-
-    # ================= CLONE MODE =================
-    else:
-        uploaded = st.file_uploader("🎤 Upload giọng mẫu (.wav)", type=["wav"])
-
-        if not uploaded:
-            st.warning("Upload file giọng trước!")
-            st.stop()
-
-        # lưu file tạm
-        temp_audio = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-        temp_audio.write(uploaded.read())
-        temp_audio.close()
-
-        output_path = "clone_output.wav"
-
-        with st.spinner("🧠 AI đang clone giọng..."):
-            tts = load_model()
-
-            tts.tts_to_file(
-                text=text,
-                speaker_wav=temp_audio.name,
-                language="vi",
-                file_path=output_path
-            )
-
-        st.success("✅ Done clone giọng!")
-        st.audio(output_path)
-
-        os.remove(temp_audio.name)
+    with open(file_name, "rb") as f:
+        st.download_button("📥 Tải MP3", f, file_name="voice.mp3")
