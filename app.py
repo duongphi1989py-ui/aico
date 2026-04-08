@@ -1,11 +1,12 @@
 import streamlit as st
+st.set_page_config(page_title="Voice AI TikTok PRO", page_icon="🎙️")
 import asyncio
 import edge_tts
 import re
 import hashlib
 import os
 
-st.set_page_config(page_title="Voice AI TikTok PRO", page_icon="🎙️")
+
 
 st.title("🎙️ Voice AI TikTok PRO")
 st.caption("🔥 Giọng mượt – style TikTok – chạy web 100%")
